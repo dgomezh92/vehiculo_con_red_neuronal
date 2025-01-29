@@ -3,49 +3,82 @@
 #include "Motor.h"
 #include "NeuralNetwork.h"
 
-// Definición de sensores y motores
+// -----------------------------------------------------------------------------
+// 1. Configura la topología de la red.
+//    - 4 entradas (dist. Izq, dist. Der, dur. Izq, dur. Der).
+//    - 8 neuronas en la capa oculta (puedes variar según tu modelo).
+//    - 4 salidas (una para cada motor).
+//    - Usamos ReLU para la capa oculta y Sigmoid para la capa de salida.
+// -----------------------------------------------------------------------------
+NeuralNetwork redNeuronal({4, 8, 4},
+                          ActivationFunction::RELU,
+                          ActivationFunction::SIGMOID);
+
+// -----------------------------------------------------------------------------
+// 2. Definición de sensores y motores
+// -----------------------------------------------------------------------------
 HCSR04 sensorDerecho(5, 18);
 HCSR04 sensorIzquierdo(19, 21);
-NeuralNetwork redNeuronal;
-Motor motores[] = {Motor(26), Motor(25), Motor(33), Motor(32)};
+Motor motores[] = { Motor(26), Motor(25), Motor(33), Motor(32) };
 
-// Variables para temporización
+// -----------------------------------------------------------------------------
+// 3. Variables de tiempo
+// -----------------------------------------------------------------------------
 unsigned long tiempoAnterior = 0;
 const unsigned long intervaloMedicion = 100;
-
-// Tiempos de activación inicial de sensores
 unsigned long tiempoInicioDerecha = 0;
 unsigned long tiempoInicioIzquierda = 0;
 
 void setup() {
     Serial.begin(115200);
-    // Encabezados para la salida serial
+    // Encabezados para la salida serial (opcional)
     Serial.println("distancia_izquierda,distancia_derecha,duracion_izquierda,duracion_derecha,IN1,IN2,IN3,IN4");
 }
 
 void loop() {
     unsigned long tiempoActual = millis();
 
+    // Control de muestreo cada 'intervaloMedicion' ms
     if (tiempoActual - tiempoAnterior >= intervaloMedicion) {
         tiempoAnterior = tiempoActual;
 
-        // Variables de salida
-        float outputs[4];
+        // Leer las distancias
         float distanciaDerecha = sensorDerecho.medirDistancia();
         float distanciaIzquierda = sensorIzquierdo.medirDistancia();
 
-        // Actualizar tiempo de inicio si cambia la distancia
-        if (distanciaDerecha > 0) tiempoInicioDerecha = tiempoActual;
-        if (distanciaIzquierda > 0) tiempoInicioIzquierda = tiempoActual;
+        // Actualizar el tiempo de inicio si hay nueva lectura válida (> 0)
+        if (distanciaDerecha > 0) {
+            tiempoInicioDerecha = tiempoActual;
+        }
+        if (distanciaIzquierda > 0) {
+            tiempoInicioIzquierda = tiempoActual;
+        }
 
         // Calcular duración desde el último cambio (en segundos)
-        float duracionDerecha = (tiempoActual - tiempoInicioDerecha) / 1000.0;
-        float duracionIzquierda = (tiempoActual - tiempoInicioIzquierda) / 1000.0;
+        float duracionDerecha = (tiempoActual - tiempoInicioDerecha) / 1000.0f;
+        float duracionIzquierda = (tiempoActual - tiempoInicioIzquierda) / 1000.0f;
 
-        // Realizar la predicción de la red neuronal
-        redNeuronal.predict(distanciaIzquierda, distanciaDerecha, duracionIzquierda, duracionDerecha, outputs);
+        // ---------------------------------------------------------------------
+        // 4. Preparar las entradas para la red neuronal
+        //    En este ejemplo: 4 entradas = {distIzq, distDer, durIzq, durDer}
+        // ---------------------------------------------------------------------
+        std::vector<float> input = {
+            distanciaIzquierda,
+            distanciaDerecha,
+            duracionIzquierda,
+            duracionDerecha
+        };
 
-        // Imprimir las distancias, duraciones y salidas
+        // ---------------------------------------------------------------------
+        // 5. Realizar la propagación hacia adelante
+        //    forward() devuelve un std::vector<float> con la salida
+        // ---------------------------------------------------------------------
+        std::vector<float> output = redNeuronal.forward(input);
+
+        // ---------------------------------------------------------------------
+        // 6. Utilizar las salidas para controlar los motores
+        //    Ej: Si la salida > 0.5, se enciende ese motor; si no, se apaga
+        // ---------------------------------------------------------------------
         Serial.print(distanciaIzquierda);
         Serial.print(",");
         Serial.print(distanciaDerecha);
@@ -55,11 +88,13 @@ void loop() {
         Serial.print(duracionDerecha);
 
         for (int i = 0; i < 4; i++) {
+            bool motorOn = (output[i] > 0.5f);
+            motores[i].setEstado(motorOn);
+
             Serial.print(",");
-            Serial.print(outputs[i] > 0.5 ? 1 : 0); // Activar como 1 o 0
-            motores[i].setEstado(outputs[i] > 0.5);
+            Serial.print(motorOn ? 1 : 0);
         }
 
-        Serial.println(); // Nueva línea para el siguiente conjunto de datos
+        Serial.println();
     }
 }
