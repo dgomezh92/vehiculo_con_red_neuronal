@@ -2,6 +2,7 @@
 #include "HCSR04.h"
 #include "Motor.h"
 #include "NeuralNetwork.h"
+#include "pesos_red_neuronal.h"
 
 // -----------------------------------------------------------------------------
 // 1. Configura la topología de la red.
@@ -33,6 +34,22 @@ void setup() {
     Serial.begin(115200);
     // Encabezados para la salida serial (opcional)
     Serial.println("distancia_izquierda,distancia_derecha,duracion_izquierda,duracion_derecha,IN1,IN2,IN3,IN4");
+
+    // -------------------------------------------------------------------------
+    // Cargar los pesos y sesgos desde el archivo 'pesos_red_neuronal.h'
+    // -------------------------------------------------------------------------
+    std::vector<std::vector<float>> weights = {
+        std::vector<float>(PESOS_CAPA_0, PESOS_CAPA_0 + sizeof(PESOS_CAPA_0) / sizeof(float)),
+        std::vector<float>(PESOS_CAPA_1, PESOS_CAPA_1 + sizeof(PESOS_CAPA_1) / sizeof(float))
+    };
+
+    std::vector<std::vector<float>> biases = {
+        std::vector<float>(SESGOS_CAPA_0, SESGOS_CAPA_0 + sizeof(SESGOS_CAPA_0) / sizeof(float)),
+        std::vector<float>(SESGOS_CAPA_1, SESGOS_CAPA_1 + sizeof(SESGOS_CAPA_1) / sizeof(float))
+    };
+
+    // Asignar los pesos y sesgos a la red neuronal
+    redNeuronal.setWeights(weights, biases);
 }
 
 void loop() {
@@ -60,7 +77,6 @@ void loop() {
 
         // ---------------------------------------------------------------------
         // 4. Preparar las entradas para la red neuronal
-        //    En este ejemplo: 4 entradas = {distIzq, distDer, durIzq, durDer}
         // ---------------------------------------------------------------------
         std::vector<float> input = {
             distanciaIzquierda,
@@ -71,13 +87,11 @@ void loop() {
 
         // ---------------------------------------------------------------------
         // 5. Realizar la propagación hacia adelante
-        //    forward() devuelve un std::vector<float> con la salida
         // ---------------------------------------------------------------------
         std::vector<float> output = redNeuronal.forward(input);
 
         // ---------------------------------------------------------------------
         // 6. Utilizar las salidas para controlar los motores
-        //    Ej: Si la salida > 0.5, se enciende ese motor; si no, se apaga
         // ---------------------------------------------------------------------
         Serial.print(distanciaIzquierda);
         Serial.print(",");

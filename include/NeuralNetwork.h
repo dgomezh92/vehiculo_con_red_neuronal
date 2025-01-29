@@ -1,12 +1,12 @@
-#ifndef NEURALNETWORK_H
-#define NEURALNETWORK_H
+#ifndef NEURAL_NETWORK_H
+#define NEURAL_NETWORK_H
 
 #include <vector>
-#include <cmath>
 #include <stdexcept>
-#include <iostream>
 
-// Posibles funciones de activación
+/**
+ * @brief Enumeración de funciones de activación disponibles.
+ */
 enum class ActivationFunction {
     RELU,
     SIGMOID,
@@ -14,89 +14,64 @@ enum class ActivationFunction {
     LINEAR
 };
 
-// --- Funciones de activación ----
-inline float relu(float x) {
-    return (x > 0.0f) ? x : 0.0f;
-}
-
-inline float sigmoid(float x) {
-    return 1.0f / (1.0f + std::exp(-x));
-}
-
-inline float tanh_custom(float x) {
-    return std::tanh(x);
-}
-
-inline float linear(float x) {
-    return x;
-}
-
-// Helper para mapear el enum a la función de activación
-inline float applyActivation(float x, ActivationFunction func) {
-    switch (func) {
-        case ActivationFunction::RELU:    return relu(x);
-        case ActivationFunction::SIGMOID: return sigmoid(x);
-        case ActivationFunction::TANH:    return tanh_custom(x);
-        case ActivationFunction::LINEAR:  return linear(x);
-        default:                          return x; // caso por defecto
-    }
-}
-
 /**
  * @class NeuralNetwork
- * @brief Clase para una red neuronal feedforward parametrizable.
+ * @brief Clase que representa una red neuronal simple de propagación hacia adelante.
  *
- * Permite especificar:
- *  - Número de capas y neuronas por capa.
- *  - Funciones de activación distintas para capas ocultas y salida.
- *  - Inicializar pesos y sesgos manual o aleatoriamente.
+ * - Permite configurar la topología (número de capas y neuronas por capa).
+ * - Ofrece la posibilidad de establecer funciones de activación para capas ocultas y de salida.
+ * - Dispone de un método `setWeights` para cargar pesos y sesgos entrenados externamente.
+ * - El método `forward` realiza la inferencia dada una entrada.
  */
 class NeuralNetwork {
 public:
     /**
-     * @brief Constructor
-     * @param layers Vector con el número de neuronas en cada capa.
-     *        Ejemplo: {4, 8, 3} => 4 entradas, 8 neuronas ocultas, 3 salidas.
-     * @param hiddenAct Función de activación para capas ocultas.
+     * @brief Constructor de la red neuronal.
+     * @param layers Vector con el número de neuronas por capa, p.ej. {4,8,3}.
+     * @param hiddenAct Función de activación para las capas ocultas.
      * @param outputAct Función de activación para la capa de salida.
-     * @throw std::runtime_error Si no hay al menos 2 capas (entrada y salida).
      */
     NeuralNetwork(const std::vector<int>& layers,
                   ActivationFunction hiddenAct = ActivationFunction::RELU,
                   ActivationFunction outputAct = ActivationFunction::SIGMOID);
 
     /**
-     * @brief Permite cargar pesos y sesgos externos (por ejemplo, de un modelo entrenado).
-     * @param weights m_weights[i] tendrá dimensión (layers[i] * layers[i+1]).
-     * @param biases m_biases[i] tendrá dimensión (layers[i+1]).
-     * @throw std::runtime_error si las dimensiones no coinciden con la topología.
+     * @brief Establece manualmente los pesos y sesgos de la red.
+     * @param weights Vector de matrices de pesos, aplanadas. Cada elemento es un vector que
+     *        representa los pesos de una capa.
+     * @param biases Vector de vectores de sesgos. Cada elemento es el sesgo para una capa.
      */
     void setWeights(const std::vector<std::vector<float>>& weights,
                     const std::vector<std::vector<float>>& biases);
 
     /**
-     * @brief Realiza la propagación hacia adelante (forward) con una entrada.
-     * @param input Vector de tamaño layers[0].
-     * @return Vector de salidas (tamaño layers.back()).
-     * @throw std::runtime_error si el tamaño de input no coincide con la capa de entrada.
+     * @brief Realiza la propagación hacia adelante dado un vector de entrada.
+     * @param input Vector de floats correspondiente a la entrada de la red.
+     * @return Vector de floats que representa la salida de la red.
      */
     std::vector<float> forward(const std::vector<float>& input);
 
 private:
     /**
-     * @brief Inicializa los vectores de pesos y sesgos con un valor fijo (0.1f) 
-     *        como ejemplo simple. En la práctica, se puede cambiar a inicialización
-     *        aleatoria o cargar valores entrenados.
+     * @brief Inicializa los pesos y sesgos con valores fijos (0.1f).
+     *        Ideal para ejemplos, aunque en casos reales se recomienda
+     *        inicialización aleatoria o usar `setWeights`.
      */
     void initWeights();
 
-private:
-    std::vector<int> m_layers;                      ///< n_i: neuronas por capa
-    std::vector<std::vector<float>> m_weights;      ///< Pesos por capa (tamaño = layers.size()-1)
-    std::vector<std::vector<float>> m_biases;       ///< Sesgos por capa (tamaño = layers.size()-1)
+    // Estructura de la red: número de neuronas por capa
+    std::vector<int> m_layers;
 
-    ActivationFunction m_hiddenActivation;          ///< Activación en capas ocultas
-    ActivationFunction m_outputActivation;          ///< Activación en capa de salida
+    // Para cada capa, se guardan los pesos en un vector aplanado
+    // Ejemplo: la i-ésima capa almacenará (n_in * n_out) pesos
+    std::vector<std::vector<float>> m_weights;
+
+    // Para cada capa, se guarda un vector de longitud igual a n_out para los sesgos
+    std::vector<std::vector<float>> m_biases;
+
+    // Funciones de activación para capas ocultas y capa de salida
+    ActivationFunction m_hiddenActivation;
+    ActivationFunction m_outputActivation;
 };
 
-#endif // NEURALNETWORK_H
+#endif // NEURAL_NETWORK_H
