@@ -47,6 +47,7 @@ static inline float applyActivation(float x, ActivationFunction func) {
     }
 }
 
+
 NeuralNetwork::NeuralNetwork(const std::vector<int>& layers,
                              ActivationFunction hiddenAct,
                              ActivationFunction outputAct)
@@ -78,6 +79,97 @@ void NeuralNetwork::initWeights() {
         m_biases[layerIndex].resize(outSize, 0.1f);
     }
 }
+
+
+float NeuralNetwork::calculateMSE(const std::vector<float>& output, const std::vector<float>& target) {
+    if (output.size() != target.size()) {
+        throw std::runtime_error("El tamaño de output y target no coinciden.");
+    }
+
+    if (output.empty()) {
+        return 0.0f; // Evita división por cero
+    }
+
+    float mse = 0.0f;
+    for (size_t i = 0; i < output.size(); ++i) {
+       float error = output[i] - target[i];
+       mse += error * error;
+    }
+    return mse / output.size();
+}
+
+float calculateMAE(const std::vector<float>& output, const std::vector<float>& target) {
+    if (output.size() != target.size()) {
+        throw std::runtime_error("El tamaño de output y target no coinciden.");
+    }
+
+    if (output.empty()) {
+        return 0.0f;
+    }
+
+    float mae = 0.0f;
+    for (size_t i = 0; i < output.size(); ++i) {
+        mae += std::abs(output[i] - target[i]);
+    }
+    return mae / output.size(); // Promedio del error absoluto
+}
+
+
+
+float NeuralNetwork:: calculateError(const std::vector<float>& output, 
+                     const std::vector<float>& target, 
+                     ErrorFunction errorType) {
+    
+    if (output.size() != target.size()) {
+        throw std::runtime_error("El tamaño de output y target no coinciden.");
+    }
+
+    if (output.empty()) {
+        return 0.0f; // Evita división por cero
+    }
+
+    float errorValue = 0.0f;
+
+    switch (errorType) {
+        case ErrorFunction::MSE:
+            // Error Cuadrático Medio (MSE)
+            for (size_t i = 0; i < output.size(); ++i) {
+                float error = output[i] - target[i];
+                errorValue += error * error;
+            }
+            errorValue /= output.size();
+            break;
+
+        case ErrorFunction::MAE:
+            // Error Absoluto Medio (MAE)
+            for (size_t i = 0; i < output.size(); ++i) {
+                errorValue += std::abs(output[i] - target[i]);
+            }
+            errorValue /= output.size();
+            break;
+
+        case ErrorFunction::CROSS_ENTROPY:
+            // Entropía Cruzada (Cross-Entropy)
+            for (size_t i = 0; i < output.size(); ++i) {
+                float y = target[i];  // Valor real (0 o 1 para binario)
+                float p = output[i];  // Probabilidad predicha (entre 0 y 1)
+
+                // Evita log(0) reemplazando p = 0 con un valor muy pequeño
+                p = std::max(p, 1e-9f);
+                p = std::min(p, 1.0f - 1e-9f);
+
+                errorValue -= y * std::log(p) + (1 - y) * std::log(1 - p);
+            }
+            errorValue /= output.size();
+            break;
+
+        default:
+            throw std::runtime_error("Tipo de función de error no reconocido.");
+    }
+
+    return errorValue;
+}
+
 
 void NeuralNetwork::setWeights(const std::vector<std::vector<float>>& weights,
                                const std::vector<std::vector<float>>& biases)
@@ -132,3 +224,85 @@ std::vector<float> NeuralNetwork::forward(const std::vector<float>& input) {
 
     return activations;
 }
+
+void NeuralNetwork::computeGradients(const std::vector<float>& input,
+                                     const std::vector<float>& target,
+                                     std::vector<std::vector<float>>& grad_weights,
+                                     std::vector<std::vector<float>>& grad_biases) {
+    // Inicializar estructuras
+    grad_weights = std::vector<std::vector<float>>(m_weights.size());
+    grad_biases = std::vector<std::vector<float>>(m_biases.size());
+
+    for (size_t i = 0; i < m_weights.size(); i++) {
+        grad_weights[i] = std::vector<float>(m_weights[i].size(), 0.0f);
+        grad_biases[i] = std::vector<float>(m_biases[i].size(), 0.0f);
+    }
+
+    // 1️ Forward pass
+    std::vector<float> activations = input;
+    std::vector<std::vector<float>> layer_activations = {activations};
+
+    for (size_t layerIndex = 0; layerIndex < m_weights.size(); layerIndex++) {
+        int inSize = m_layers[layerIndex];
+        int outSize = m_layers[layerIndex + 1];
+
+        std::vector<float> newActivations(outSize, 0.0f);
+
+        for (int j = 0; j < outSize; j++) {
+            for (int i = 0; i < inSize; i++) {
+                newActivations[j] += activations[i] * m_weights[layerIndex][i * outSize + j];
+            }
+            newActivations[j] += m_biases[layerIndex][j];
+
+            ActivationFunction func = (layerIndex < m_layers.size() - 2) ? m_hiddenActivation : m_outputActivation;
+            newActivations[j] = applyActivation(newActivations[j], func);
+        }
+        activations = newActivations;
+        layer_activations.push_back(activations);
+    }
+
+    //  Backpropagation
+    std::vector<float> delta = layer_activations.back();
+    for (size_t i = 0; i < delta.size(); i++) {
+        delta[i] = delta[i] - target[i]; // Derivada de MSE: (output - target)
+    }
+
+    for (int layerIndex = m_weights.size() - 1; layerIndex >= 0; layerIndex--) {
+        int inSize = m_layers[layerIndex];
+        int outSize = m_layers[layerIndex + 1];
+
+        std::vector<float> prev_delta = std::vector<float>(inSize, 0.0f);
+
+        for (int j = 0; j < outSize; j++) {
+            for (int i = 0; i < inSize; i++) {
+                grad_weights[layerIndex][i * outSize + j] = layer_activations[layerIndex][i] * delta[j];
+                prev_delta[i] += m_weights[layerIndex][i * outSize + j] * delta[j];
+            }
+            grad_biases[layerIndex][j] = delta[j];
+        }
+
+        delta = prev_delta;
+    }
+}
+
+
+void NeuralNetwork::updateWeights(const std::vector<std::vector<float>>& gradients_weights,
+                                  const std::vector<std::vector<float>>& gradients_biases,
+                                  float learningRate) {
+    if (gradients_weights.size() != m_weights.size() || 
+        gradients_biases.size() != m_biases.size()) {
+        throw std::runtime_error("Los gradientes no coinciden con la estructura de la red.");
+    }
+
+    // Recorremos todas las capas y actualizamos pesos y sesgos
+    for (size_t layerIndex = 0; layerIndex < m_weights.size(); ++layerIndex) {
+        for (size_t i = 0; i < m_weights[layerIndex].size(); ++i) {
+            m_weights[layerIndex][i] -= learningRate * gradients_weights[layerIndex][i];
+        }
+
+        for (size_t j = 0; j < m_biases[layerIndex].size(); ++j) {
+            m_biases[layerIndex][j] -= learningRate * gradients_biases[layerIndex][j];
+        }
+    }
+}
+

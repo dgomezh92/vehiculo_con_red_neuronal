@@ -4,6 +4,17 @@
 #include "NeuralNetwork.h"
 #include "pesos_red_neuronal.h"
 
+
+const float learningRate = 0.01f; // Controla qué tan rápido se ajustan los pesos
+
+// Valores esperados (Ejemplo: motores encendidos o apagados según una regla)
+std::vector<std::vector<float>> targetOptions = {
+    {1,0,1,0},  // Adelante
+    {0,1,0,1},  // Atrás
+    {1,0,0,1},  // Izquierda
+    {0,1,1,0}   // Derecha
+};
+int findClosestMatch(const std::vector<float>& input, const std::vector<std::vector<float>>& targetOptions);
 // -----------------------------------------------------------------------------
 // 1. Configura la topología de la red.
 //    - 4 entradas (dist. Izq, dist. Der, dur. Izq, dur. Der).
@@ -30,6 +41,30 @@ const unsigned long intervaloMedicion = 100;
 unsigned long tiempoInicioDerecha = 0;
 unsigned long tiempoInicioIzquierda = 0;
 
+int findClosestMatch(const std::vector<float>& input, const std::vector<std::vector<float>>& targetOptions) {
+    if (targetOptions.empty() || input.size() != 4) {
+        return -1; // Error
+    }
+
+    int closestIndex = -1;
+    float minDistance = 99999.0f; // En Arduino, evitar std::numeric_limits<float>::max()
+
+    for (size_t i = 0; i < targetOptions.size(); i++) {
+        float distance = 0.0f;
+        for (size_t j = 0; j < 4; j++) {
+            float diff = input[j] - targetOptions[i][j];
+            distance += diff * diff; // Distancia euclidiana
+        }
+
+        if (distance < minDistance) {
+            minDistance = distance;
+            closestIndex = i;
+        }
+    }
+
+    return closestIndex;
+}
+
 void setup() {
     Serial.begin(115200);
     // Encabezados para la salida serial (opcional)
@@ -55,60 +90,51 @@ void setup() {
 void loop() {
     unsigned long tiempoActual = millis();
 
-    // Control de muestreo cada 'intervaloMedicion' ms
     if (tiempoActual - tiempoAnterior >= intervaloMedicion) {
         tiempoAnterior = tiempoActual;
 
-        // Leer las distancias
+        // Leer sensores
         float distanciaDerecha = sensorDerecho.medirDistancia();
         float distanciaIzquierda = sensorIzquierdo.medirDistancia();
 
-        // Actualizar el tiempo de inicio si hay nueva lectura válida (> 0)
-        if (distanciaDerecha > 0) {
-            tiempoInicioDerecha = tiempoActual;
-        }
-        if (distanciaIzquierda > 0) {
-            tiempoInicioIzquierda = tiempoActual;
-        }
+        if (distanciaDerecha > 0) tiempoInicioDerecha = tiempoActual;
+        if (distanciaIzquierda > 0) tiempoInicioIzquierda = tiempoActual;
 
-        // Calcular duración desde el último cambio (en segundos)
         float duracionDerecha = (tiempoActual - tiempoInicioDerecha) / 1000.0f;
         float duracionIzquierda = (tiempoActual - tiempoInicioIzquierda) / 1000.0f;
 
-        // ---------------------------------------------------------------------
-        // 4. Preparar las entradas para la red neuronal
-        // ---------------------------------------------------------------------
-        std::vector<float> input = {
-            distanciaIzquierda,
-            distanciaDerecha,
-            duracionIzquierda,
-            duracionDerecha
-        };
-
-        // ---------------------------------------------------------------------
-        // 5. Realizar la propagación hacia adelante
-        // ---------------------------------------------------------------------
+        // 1️ Entrada a la red neuronal
+        std::vector<float> input = {distanciaIzquierda, distanciaDerecha, duracionIzquierda, duracionDerecha};
+        
+        // 2️ Forward pass
         std::vector<float> output = redNeuronal.forward(input);
 
-        // ---------------------------------------------------------------------
-        // 6. Utilizar las salidas para controlar los motores
-        // ---------------------------------------------------------------------
-        Serial.print(distanciaIzquierda);
-        Serial.print(",");
-        Serial.print(distanciaDerecha);
-        Serial.print(",");
-        Serial.print(duracionIzquierda);
-        Serial.print(",");
-        Serial.print(duracionDerecha);
+        int closestMatch = findClosestMatch(output, targetOptions);
+        Serial.println(closestMatch);
+        std::vector<float> targetOutputs = targetOptions[closestMatch];
+        // 3️ Calcular error con MSE
+        float error = redNeuronal.calculateError(output, targetOutputs, ErrorFunction::MSE);
 
+        std::vector<std::vector<float>> grad_weights, grad_biases;
+        redNeuronal.computeGradients(input, targetOutputs, grad_weights, grad_biases);
+
+        // 5️ Ajustar pesos con descenso de gradiente
+        redNeuronal.updateWeights(grad_weights, grad_biases, learningRate);
+
+        // 6️ Imprimir información de depuración
+        // Serial.print(distanciaIzquierda); Serial.print(",");
+        // Serial.print(distanciaDerecha); Serial.print(",");
+        // Serial.print(duracionIzquierda); Serial.print(",");
+        // Serial.print(duracionDerecha);
         for (int i = 0; i < 4; i++) {
             bool motorOn = (output[i] > 0.5f);
             motores[i].setEstado(motorOn);
-
             Serial.print(",");
             Serial.print(motorOn ? 1 : 0);
         }
-
-        Serial.println();
+        // Serial.print(", Error: ");
+        // Serial.println(error);
     }
 }
+
+

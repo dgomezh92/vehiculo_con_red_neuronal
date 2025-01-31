@@ -13,6 +13,14 @@ enum class ActivationFunction {
     TANH,
     LINEAR
 };
+/**
+ * @brief Tipos de funciones de error disponibles
+ */
+enum class ErrorFunction {
+    MSE,  // Error Cuadrático Medio
+    MAE,  // Error Absoluto Medio
+    CROSS_ENTROPY // Entropía Cruzada
+};
 
 /**
  * @class NeuralNetwork
@@ -34,7 +42,13 @@ public:
     NeuralNetwork(const std::vector<int>& layers,
                   ActivationFunction hiddenAct = ActivationFunction::RELU,
                   ActivationFunction outputAct = ActivationFunction::SIGMOID);
-
+                  /**
+     * @brief Constructor de la red neuronal.
+     * @param layers Vector con el número de neuronas por capa, p.ej. {4,8,3}.
+     * @param hiddenAct Función de activación para las capas ocultas.
+     * @param outputAct Función de activación para la capa de salida.
+     */
+    float calculateMSE(const std::vector<float>& output, const std::vector<float>& target);
     /**
      * @brief Establece manualmente los pesos y sesgos de la red.
      * @param weights Vector de matrices de pesos, aplanadas. Cada elemento es un vector que
@@ -43,13 +57,38 @@ public:
      */
     void setWeights(const std::vector<std::vector<float>>& weights,
                     const std::vector<std::vector<float>>& biases);
+    
+    /**
+     * 
+     */
+    void updateWeights(const std::vector<std::vector<float>>& gradients_weights,
+                                  const std::vector<std::vector<float>>& gradients_biases,
+                                  float learningRate);
+    /**
+     * @brief Función para calcular el error dependiendo del tipo seleccionado.
+     * @param output Vector con las predicciones de la red neuronal.
+     * @param target Vector con los valores esperados.
+     * @param errorType Tipo de función de error (MSE, MAE o Cross-Entropy).
+     * @return Valor del error calculado.
+     */
+    float calculateError(const std::vector<float>& output, 
+                        const std::vector<float>& target, 
+                        ErrorFunction errorType);
 
+    /**
+     * 
+     */
+    void computeGradients(const std::vector<float>& input,
+                                     const std::vector<float>& target,
+                                     std::vector<std::vector<float>>& grad_weights,
+                                     std::vector<std::vector<float>>& grad_biases);
     /**
      * @brief Realiza la propagación hacia adelante dado un vector de entrada.
      * @param input Vector de floats correspondiente a la entrada de la red.
      * @return Vector de floats que representa la salida de la red.
      */
     std::vector<float> forward(const std::vector<float>& input);
+
 
 private:
     /**
